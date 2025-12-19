@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CONVERGE — Modern Community Platform</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+
+<style>
+/* ================= VARIABLES ================= */
+:root {
+    --primary: #6366f1;
+    --secondary: #9333ea;
+    --accent: #ec4899;
+    --dark: #020617;
+    --glass: rgba(255,255,255,0.15);
+}
+
+/* ================= RESET ================= */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+body {
+    font-family: 'Inter', sans-serif;
+    background: radial-gradient(circle at top, #eef2ff, #f8fafc);
+    color: #334155;
+    overflow-x: hidden;
+}
+
+/* ================= BACKGROUND BLOBS ================= */
+.blob {
+    position: fixed;
+    width: 500px;
+    height: 500px;
+    filter: blur(120px);
+    opacity: 0.6;
+    z-index: -1;
+    animation: float 14s infinite alternate ease-in-out;
+}
+.blob.one {
+    background: #818cf8;
+    top: -150px;
+    left: -150px;
+}
+.blob.two {
+    background: #f472b6;
+    bottom: -150px;
+    right: -150px;
+    animation-delay: 4s;
+}
+
+@keyframes float {
+    from { transform: translateY(0) }
+    to { transform: translateY(80px) }
+}
+
+/* ================= NAVBAR ================= */
+nav {
+    position: sticky;
+    top: 0;
+    backdrop-filter: blur(20px);
+    background: rgba(255,255,255,0.65);
+    border-bottom: 1px solid rgba(255,255,255,0.4);
+    padding: 1.2rem 6%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 100;
+}
+
+.logo {
+    font-size: 1.8rem;
+    font-weight: 900;
+    background: linear-gradient(90deg,var(--primary),var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-decoration: none;
+}
+
+.nav-actions a {
+    margin-left: 1.5rem;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.join {
+    padding: 12px 26px;
+    border-radius: 50px;
+    background: linear-gradient(135deg,var(--primary),var(--secondary));
+    color: white;
+    box-shadow: 0 10px 30px rgba(99,102,241,.4);
+    transition: transform .3s ease;
+}
+.join:hover {
+    transform: translateY(-4px) scale(1.05);
+}
+
+/* ================= HERO ================= */
+.hero {
+    padding: 7rem 1rem 5rem;
+    max-width: 900px;
+    margin: auto;
+    text-align: center;
+}
+
+.badge {
+    display: inline-block;
+    padding: 6px 18px;
+    border-radius: 999px;
+    background: white;
+    font-size: .8rem;
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: 2rem;
+    box-shadow: 0 10px 20px rgba(0,0,0,.05);
+}
+
+.hero h1 {
+    font-size: clamp(2.5rem, 6vw, 4.5rem);
+    font-weight: 900;
+    line-height: 1.1;
+    color: var(--dark);
+}
+.hero h1 span {
+    background: linear-gradient(90deg,var(--primary),var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.hero p {
+    margin: 2rem auto 3rem;
+    max-width: 600px;
+    font-size: 1.25rem;
+    color: #64748b;
+}
+
+.cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 18px 44px;
+    border-radius: 50px;
+    background: linear-gradient(135deg,var(--primary),var(--secondary));
+    color: white;
+    text-decoration: none;
+    font-weight: 700;
+    box-shadow: 0 15px 40px rgba(99,102,241,.5);
+    transition: transform .3s ease;
+}
+.cta:hover {
+    transform: translateY(-6px) scale(1.06);
+}
+
+/* ================= FEATURES ================= */
+.features {
+    max-width: 1200px;
+    margin: 5rem auto;
+    padding: 0 1rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit,minmax(320px,1fr));
+    gap: 30px;
+}
+
+.card {
+    background: rgba(255,255,255,.8);
+    backdrop-filter: blur(20px);
+    border-radius: 24px;
+    padding: 2.8rem;
+    box-shadow: 0 20px 40px rgba(0,0,0,.08);
+    transform: translateY(40px);
+    opacity: 0;
+    transition: .8s cubic-bezier(.22,1,.36,1);
+}
+.card.visible {
+    transform: translateY(0);
+    opacity: 1;
+}
+
+.icon {
+    font-size: 2rem;
+    margin-bottom: 1.5rem;
+}
+
+.card h3 {
+    font-size: 1.4rem;
+    margin-bottom: 10px;
+    color: var(--dark);
+}
+
+.card p {
+    color: #64748b;
+    line-height: 1.6;
+}
+
+/* ================= FOOTER ================= */
+footer {
+    text-align: center;
+    padding: 4rem 1rem;
+    background: white;
+    border-top: 1px solid #e5e7eb;
+    color: #94a3b8;
+}
+footer a {
+    color: var(--primary);
+    font-weight: 700;
+    text-decoration: none;
+}
+</style>
+</head>
+
+<body>
+
+<div class="blob one"></div>
+<div class="blob two"></div>
+
+<nav>
+    <a href="index.php" class="logo">CONVERGE.</a>
+    <div class="nav-actions">
+        <a href="login.php">Log In</a>
+        <a href="register.php" class="join">Join Club</a>
+    </div>
+</nav>
+
+<section class="hero">
+    <div class="badge">🚀 THE ULTIMATE PLATFORM</div>
+    <h1>
+        Where Community Meets<br>
+        <span>Collaboration.</span>
+    </h1>
+    <p>
+        Build modern communities with seamless event management, insights,
+        and powerful collaboration tools.
+    </p>
+    <a href="register.php" class="cta">
+        Get Started Free →
+    </a>
+</section>
+
+<section class="features">
+    <div class="card">
+        <div class="icon">🎉</div>
+        <h3>Event Management</h3>
+        <p>Create, manage, and track events effortlessly.</p>
+    </div>
+    <div class="card">
+        <div class="icon">⚡</div>
+        <h3>Live Analytics</h3>
+        <p>Monitor engagement and growth in real time.</p>
+    </div>
+    <div class="card">
+        <div class="icon">🛡️</div>
+        <h3>Enterprise Security</h3>
+        <p>Role-based access and scalable infrastructure.</p>
+    </div>
+</section>
+
+<footer>
+    © <?= date('Y') ?> CONVERGE Club System<br><br>
+    Crafted by <a href="developer.php">Dr. Doom</a>
+</footer>
+
+<script>
+/* ===== Scroll Reveal Animation ===== */
+const cards = document.querySelectorAll('.card');
+const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+        if(entry.isIntersecting){
+            entry.target.classList.add('visible');
+        }
+    });
+},{ threshold: 0.2 });
+
+cards.forEach(card => observer.observe(card));
+</script>
+
+</body>
+</html>
