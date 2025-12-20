@@ -2,6 +2,31 @@
 require_once __DIR__ . '/../config/config.php';
 
 /**
+ * INTERNAL MAIL LOGGER (TXT FILE)
+ * Logs every email attempt (success or fail)
+ */
+function log_mail_txt($to, $toName, $subject, $body, $status) {
+
+    $logDir = __DIR__ . '/../mail_logs';
+    if (!is_dir($logDir)) {
+        mkdir($logDir, 0777, true);
+    }
+
+    $filename = $logDir . '/mail_' . date('Y-m-d') . '.txt';
+
+    $entry  = "--------------------------------------\n";
+    $entry .= "Date    : " . date('Y-m-d H:i:s') . "\n";
+    $entry .= "To      : $to ($toName)\n";
+    $entry .= "Subject : $subject\n";
+    $entry .= "Status  : $status\n";
+    $entry .= "Message :\n";
+    $entry .= strip_tags($body) . "\n";
+    $entry .= "--------------------------------------\n\n";
+
+    file_put_contents($filename, $entry, FILE_APPEND);
+}
+
+/**
  * GENERIC MAILER FUNCTION
  * Wraps content in a nice HTML template and sends it.
  */
@@ -40,31 +65,31 @@ function send_app_mail(string $to, string $toName, string $subject, string $body
     </html>";
 
     // 2. Set Headers
-    $headers  = "MIME-Version: 1.0" . "\r\n";
-    $headers .= "Content-type: text/html; charset=UTF-8" . "\r\n";
-    $headers .= "From: CONVERGE Admin <no-reply@converge.com>" . "\r\n"; // Change this to your domain on live server
+    $headers  = "MIME-Version: 1.0\r\n";
+    $headers .= "Content-type: text/html; charset=UTF-8\r\n";
+    $headers .= "From: CONVERGE Admin <no-reply@converge.com>\r\n";
 
-    // 3. LOGGING (Backup for Localhost)
-    // We keep this because XAMPP usually can't send real emails without complex config.
-    // You can read the password in 'email_log.txt' if the email doesn't arrive.
-    $logMessage = "-------------------\n";
-    $logMessage .= "Date: " . date('Y-m-d H:i:s') . "\n";
-    $logMessage .= "To: $to ($toName)\n";
-    $logMessage .= "Subject: $subject\n";
-    $logMessage .= "Body Snippet: " . strip_tags(substr($body, 0, 100)) . "...\n";
-    file_put_contents(__DIR__ . '/../email_log.txt', $logMessage, FILE_APPEND);
+    // 3. Send Email (localhost safe)
+    $sent = @mail($to, $subject, $htmlContent, $headers);
 
-    // 4. Send Email
-    // Using @ to suppress warnings if SMTP is not configured on localhost
-    return @mail($to, $subject, $htmlContent, $headers);
+    // 4. TXT LOG (ALWAYS)
+    log_mail_txt(
+        $to,
+        $toName,
+        $subject,
+        $body,
+        $sent ? 'SENT' : 'FAILED'
+    );
+
+    return $sent;
 }
 
 /**
  * SPECIFIC WRAPPER FOR MEMBER WELCOME
- * Used by admin_members.php
+ * Used by admin_members.php & CSV import
  */
 function send_welcome_email($toEmail, $userName, $password) {
-    // Change this URL to your actual login page
+
     $loginUrl = "http://localhost/converge/public/login.php"; 
 
     $subject = "Welcome to CONVERGE! Registration Successful";
@@ -72,11 +97,11 @@ function send_welcome_email($toEmail, $userName, $password) {
     $body = "
         <p>You have been successfully registered as a member.</p>
         <div style='background: #f8fafc; padding: 15px; border-radius: 6px; border: 1px solid #e2e8f0; margin: 20px 0;'>
-            <p style='margin:0 0 10px 0;'><strong>Here are your login credentials:</strong></p>
-            <p style='margin:5px 0;'>📧 <strong>Email:</strong> $toEmail</p>
-            <p style='margin:5px 0;'>🔑 <strong>Password:</strong> <code style='background:#e2e8f0; padding:2px 6px; border-radius:4px; font-size: 1.1em;'>$password</code></p>
+            <p><strong>Login Credentials:</strong></p>
+            <p>📧 Email: <strong>$toEmail</strong></p>
+            <p>🔑 Password: <code>$password</code></p>
         </div>
-        <p>Please log in immediately and change your password.</p>
+        <p>Please log in and change your password.</p>
         <p><a href='$loginUrl' class='btn'>Login to Dashboard</a></p>
     ";
 

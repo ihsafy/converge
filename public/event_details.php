@@ -44,7 +44,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // --- FETCH EVENT DETAILS ---
-// We fetch the event info AND the count of currently registered users
 $stmt = $pdo->prepare("SELECT e.*, 
     (SELECT COUNT(*) FROM event_registrations WHERE event_id = e.id) as current_count 
     FROM events e WHERE e.id = ?");
@@ -61,6 +60,23 @@ if (!$event) {
 $stmt = $pdo->prepare("SELECT id FROM event_registrations WHERE user_id = ? AND event_id = ?");
 $stmt->execute([$user['id'], $eventId]);
 $isRegistered = (bool)$stmt->fetch();
+
+/* ======================================================
+   ADDED CODE START — FETCH MEMBER ROLE (NO EXISTING CODE TOUCHED)
+   ====================================================== */
+$myRole = null;
+if ($isRegistered) {
+    $roleStmt = $pdo->prepare("
+        SELECT role 
+        FROM event_roles 
+        WHERE event_id = ? AND user_id = ?
+    ");
+    $roleStmt->execute([$eventId, $user['id']]);
+    $myRole = $roleStmt->fetchColumn();
+}
+/* ======================================================
+   ADDED CODE END
+   ====================================================== */
 
 $isFull = ($event['current_count'] >= $event['max_capacity']);
 ?>
@@ -80,14 +96,9 @@ $isFull = ($event['current_count'] >= $event['max_capacity']);
         
         .container { max-width: 800px; margin: 40px auto; padding: 0 20px; }
         
-        /* --- UPDATED DETAIL CARD --- */
-        /* Removed padding here so the image can touch the edges */
         .detail-card { background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px -5px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; }
-        
-        /* New Wrapper for text content */
         .card-content { padding: 40px; }
 
-        /* HERO IMAGE STYLES */
         .event-hero { width: 100%; height: 350px; object-fit: cover; display: block; }
         .event-hero-placeholder { width: 100%; height: 200px; background: linear-gradient(135deg, #e0e7ff 0%, #4f46e5 100%); display:flex; align-items:center; justify-content:center; color:white; font-size: 2rem; font-weight: 800; letter-spacing: 2px; }
 
@@ -149,6 +160,14 @@ $isFull = ($event['current_count'] >= $event['max_capacity']);
             <div class="event-header">
                 <?php if ($isRegistered): ?>
                     <span class="status-badge status-registered">✅ Registered</span>
+
+                    <!-- ✅ ADDED ROLE DISPLAY (ONLY ADDITION IN VIEW) -->
+                    <?php if (!empty($myRole)): ?>
+                        <div style="margin-top:6px; font-size:0.95rem; color:#2563eb; font-weight:600;">
+                            Your Role: <?= ucfirst($myRole) ?>
+                        </div>
+                    <?php endif; ?>
+
                 <?php elseif ($isFull): ?>
                     <span class="status-badge status-full">Full Capacity</span>
                 <?php else: ?>

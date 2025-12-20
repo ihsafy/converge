@@ -1,27 +1,71 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
+
 require_login();
 $pdo = getDB();
+$user = current_user();
 
-$event_id = $_GET['id'] ?? 0;
+/* ONLY EVENT MANAGER OR SUPER ADMIN CAN ASSIGN ROLES */
+if (!in_array($user['role'], ['super_admin', 'event_manager'])) {
+    flash('error', 'Access denied.');
+    redirect('admin_dashboard.php');
+}
 
-// 1. Get Event Info
+/* VALIDATE EVENT ID */
+$eventId = $_GET['id'] ?? 0;
+if (!$eventId) {
+    flash('error', 'Invalid Event');
+    redirect('admin_events.php');
+}
+
+/* FETCH EVENT */
 $stmt = $pdo->prepare("SELECT * FROM events WHERE id = ?");
-$stmt->execute([$event_id]);
+$stmt->execute([$eventId]);
 $event = $stmt->fetch();
 
-if (!$event) die("Event not found");
+if (!$event) {
+    flash('error', 'Event not found');
+    redirect('admin_events.php');
+}
 
-// 2. Get Registered Users
-$sql = "
-    SELECT u.full_name, u.email, u.unique_id, u.contact_info, r.created_at as reg_date
-    FROM event_registrations r
-    JOIN users u ON r.user_id = u.id
-    WHERE r.event_id = ?
-    ORDER BY r.created_at ASC
-";
-$stmt = $pdo->prepare($sql);
-$stmt->execute([$event_id]);
+/* HANDLE ROLE ASSIGNMENT */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['assign_role'])) {
+
+    $memberId = (int) $_POST['user_id'];
+    $role     = $_POST['role'];
+
+    $allowed = ['anchor','volunteer','crafting'];
+    if (!in_array($role, $allowed)) {
+        flash('error', 'Invalid role selected');
+        redirect("admin_event_view.php?id=$eventId");
+    }
+
+    $stmt = $pdo->prepare("
+        INSERT INTO event_roles (event_id, user_id, role, assigned_by)
+        VALUES (?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE role = VALUES(role)
+    ");
+    $stmt->execute([$eventId, $memberId, $role, $user['id']]);
+
+    flash('success', 'Role assigned successfully');
+    redirect("admin_event_view.php?id=$eventId");
+}
+
+/* FETCH ATTENDEES WITH ROLES */
+$stmt = $pdo->prepare("
+    SELECT 
+        u.id,
+        u.full_name,
+        u.email,
+        er.created_at,
+        r.role
+    FROM event_registrations er
+    JOIN users u ON er.user_id = u.id
+    LEFT JOIN event_roles r 
+        ON r.user_id = u.id AND r.event_id = er.event_id
+    WHERE er.event_id = ?
+");
+$stmt->execute([$eventId]);
 $attendees = $stmt->fetchAll();
 ?>
 <!DOCTYPE html>
@@ -30,28 +74,56 @@ $attendees = $stmt->fetchAll();
     <title>Attendees - <?= htmlspecialchars($event['title']) ?></title>
     <link rel="stylesheet" href="../assets/css/style.css">
 </head>
-<body style="background:#f3f4f6; padding: 40px;">
-    <div class="container" style="background:white; padding:30px; border-radius:12px; max-width:800px;">
-        <a href="admin_events.php">&larr; Back to Events</a>
-        <h2>Attendees for: <?= htmlspecialchars($event['title']) ?></h2>
-        
-        <table style="width:100%; border-collapse:collapse; margin-top:20px;">
-            <tr style="background:#f8fafc; text-align:left;">
-                <th style="padding:10px;">Name</th>
-                <th style="padding:10px;">Email</th>
-                <th style="padding:10px;">ID</th>
-                <th style="padding:10px;">Registered At</th>
-            </tr>
-            <?php foreach($attendees as $a): ?>
-            <tr style="border-bottom:1px solid #eee;">
-                <td style="padding:10px; font-weight:bold;"><?= htmlspecialchars($a['full_name']) ?></td>
-                <td style="padding:10px;"><?= htmlspecialchars($a['email']) ?></td>
-                <td style="padding:10px;"><?= htmlspecialchars($a['unique_id']) ?></td>
-                <td style="padding:10px; font-size:0.9em; color:#666;"><?= $a['reg_date'] ?></td>
-            </tr>
-            <?php endforeach; ?>
-        </table>
-        <?php if(count($attendees) == 0) echo "<p>No one has registered yet.</p>"; ?>
-    </div>
+<body>
+<div class="container">
+
+<a href="admin_events.php">&larr; Back to Events</a>
+
+<h2>Attendees for: <?= htmlspecialchars($event['title']) ?></h2>
+
+<?php if ($msg = flash('success')): ?>
+<div class="success"><?= $msg ?></div>
+<?php endif; ?>
+
+<?php if ($msg = flash('error')): ?>
+<div class="error"><?= $msg ?></div>
+<?php endif; ?>
+
+<table style="width:100%; margin-top:20px;">
+<tr>
+    <th>Name</th>
+    <th>Email</th>
+    <th>Registered At</th>
+    <th>Assign Role</th>
+</tr>
+
+<?php if (!$attendees): ?>
+<tr>
+    <td colspan="4">No members registered yet.</td>
+</tr>
+<?php endif; ?>
+
+<?php foreach ($attendees as $row): ?>
+<tr>
+    <td><?= htmlspecialchars($row['full_name']) ?></td>
+    <td><?= htmlspecialchars($row['email']) ?></td>
+    <td><?= htmlspecialchars($row['created_at']) ?></td>
+    <td>
+        <form method="post">
+            <input type="hidden" name="assign_role" value="1">
+            <input type="hidden" name="user_id" value="<?= $row['id'] ?>">
+            <select name="role" onchange="this.form.submit()">
+                <option value="">Select Role</option>
+                <option value="anchor" <?= $row['role']=='anchor'?'selected':'' ?>>Anchor</option>
+                <option value="volunteer" <?= $row['role']=='volunteer'?'selected':'' ?>>Volunteer</option>
+                <option value="crafting" <?= $row['role']=='crafting'?'selected':'' ?>>Crafting</option>
+            </select>
+        </form>
+    </td>
+</tr>
+<?php endforeach; ?>
+</table>
+
+</div>
 </body>
 </html>

@@ -3,26 +3,26 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/mailer.php';
 
 require_login();
-$pdo = getDB();
+$pdo  = getDB();
 $user = current_user();
 
-// --- FORCE FETCH USER ROLE ---
-$roleStmt = $pdo->prepare("SELECT role FROM users WHERE id = ?");
-$roleStmt->execute([$user['id']]);
-$real_role = $roleStmt->fetchColumn(); 
+/* FETCH REAL ROLE */
+$stmt = $pdo->prepare("SELECT role FROM users WHERE id = ?");
+$stmt->execute([$user['id']]);
+$real_role = $stmt->fetchColumn();
 
-// 1. Validate ID
+/* VALIDATE EVENT ID */
 $eventId = $_GET['id'] ?? 0;
-if ($eventId == 0) {
+if (!$eventId) {
     flash('error', 'Invalid Event ID.');
     redirect('events.php');
 }
 
-// 2. Fetch Event Details
+/* FETCH EVENT */
 $stmt = $pdo->prepare("
-    SELECT e.*, u.full_name as organizer 
-    FROM events e 
-    JOIN users u ON e.created_by = u.id 
+    SELECT e.*, u.full_name AS organizer
+    FROM events e
+    JOIN users u ON e.created_by = u.id
     WHERE e.id = ?
 ");
 $stmt->execute([$eventId]);
@@ -33,144 +33,142 @@ if (!$event) {
     redirect('events.php');
 }
 
-// 3. Check if User is already registered
-$regStmt = $pdo->prepare("SELECT id FROM event_registrations WHERE user_id = ? AND event_id = ?");
-$regStmt->execute([$user['id'], $eventId]);
-$isRegistered = $regStmt->fetch();
+/* CHECK REGISTRATION */
+$stmt = $pdo->prepare("
+    SELECT id FROM event_registrations
+    WHERE user_id = ? AND event_id = ?
+");
+$stmt->execute([$user['id'], $eventId]);
+$isRegistered = $stmt->fetch();
 
-// --- DEFINING ROLES FOR LOGIC ---
-$is_admin     = ($real_role === 'admin' || $real_role === 'super_admin');
-$is_organizer = ($user['id'] == $event['created_by']);
+/* ROLE FLAGS */
+$is_admin         = in_array($real_role, ['admin','super_admin']);
+$is_event_manager = ($real_role === 'event_manager');
+$isPast           = strtotime($event['start_time']) < time();
 
-// 4. Handle Join / Cancel Actions
+/* FETCH REGISTERED MEMBERS (FOR EVENT MANAGER) */
+$registeredMembers = [];
+if ($is_event_manager) {
+    $stmt = $pdo->prepare("
+        SELECT u.id, u.full_name, u.email, r.role
+        FROM event_registrations er
+        JOIN users u ON er.user_id = u.id
+        LEFT JOIN event_roles r
+            ON r.user_id = u.id AND r.event_id = er.event_id
+        WHERE er.event_id = ?
+    ");
+    $stmt->execute([$eventId]);
+    $registeredMembers = $stmt->fetchAll();
+}
+
+/* HANDLE JOIN / LEAVE */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    
-    // Security Check: Block Admin AND Organizer from POST action
-    if ($is_admin || $is_organizer) {
-        flash('error', 'Admins and Organizers are not allowed to join events.');
+
+    if ($is_admin || $is_event_manager) {
+        flash('error', 'Admins and Event Managers cannot join events.');
         redirect("event_register.php?id=$eventId");
     }
 
     if (isset($_POST['join_event'])) {
         try {
-            $ins = $pdo->prepare("INSERT INTO event_registrations (user_id, event_id, status) VALUES (?, ?, 'registered')");
-            $ins->execute([$user['id'], $eventId]);
-            flash('success', 'You have successfully joined this event!');
+            $pdo->prepare("
+                INSERT INTO event_registrations (user_id, event_id, status)
+                VALUES (?, ?, 'registered')
+            ")->execute([$user['id'], $eventId]);
+            flash('success', 'Successfully registered!');
         } catch (Exception $e) {
-            flash('error', 'Could not register. You might already be joined.');
+            flash('error', 'Already registered.');
         }
-    } elseif (isset($_POST['leave_event'])) {
-        $del = $pdo->prepare("DELETE FROM event_registrations WHERE user_id = ? AND event_id = ?");
-        $del->execute([$user['id'], $eventId]);
+    }
+
+    if (isset($_POST['leave_event'])) {
+        $pdo->prepare("
+            DELETE FROM event_registrations
+            WHERE user_id = ? AND event_id = ?
+        ")->execute([$user['id'], $eventId]);
         flash('success', 'Registration cancelled.');
     }
-    header("Location: event_register.php?id=$eventId");
-    exit;
+
+    redirect("event_register.php?id=$eventId");
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <title><?= htmlspecialchars($event['title']) ?> - CONVERGE</title>
+    <title><?= htmlspecialchars($event['title']) ?></title>
     <link rel="stylesheet" href="../assets/css/style.css">
-    <style>
-        .event-banner { width: 100%; height: 300px; object-fit: cover; border-radius: 12px; margin-bottom: 2rem; border: 1px solid #ddd; }
-        .event-meta { display: flex; gap: 20px; color: #666; font-size: 0.95rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
-        .meta-item { display: flex; align-items: center; gap: 8px; background: #f9fafb; padding: 8px 15px; border-radius: 50px; }
-        .status-badge { display: inline-block; padding: 5px 12px; border-radius: 6px; font-weight: bold; font-size: 0.8rem; text-transform: uppercase; }
-        .status-upcoming { background: #dcfce7; color: #166534; }
-        .status-passed { background: #fee2e2; color: #991b1b; }
-    </style>
 </head>
 <body>
-<div class="container animate-fade-up">
-    
-    <nav>
-        <a href="events.php">&larr; Back to Events</a>
-        <div style="font-weight: bold; color: var(--primary);">Event Details</div>
-    </nav>
+<div class="container">
 
-    <?php if ($msg = flash('success')): ?> <div class="success"><?= $msg ?></div> <?php endif; ?>
-    <?php if ($msg = flash('error')): ?> <div class="error"><?= $msg ?></div> <?php endif; ?>
+<h1><?= htmlspecialchars($event['title']) ?></h1>
+<p><?= htmlspecialchars($event['description']) ?></p>
 
-    <div class="card" style="padding: 0; overflow: hidden;">
-        
-        <?php if (!empty($event['event_image'])): ?>
-            <img src="uploads/<?= htmlspecialchars($event['event_image']) ?>" class="event-banner" style="border-radius: 0; margin: 0;">
-        <?php else: ?>
-            <div style="height: 150px; background: linear-gradient(135deg, #e0e7ff, #c7d2fe); display: flex; align-items: center; justify-content: center; color: #6366f1;">
-                (No Image Provided)
-            </div>
-        <?php endif; ?>
+<!-- EVENT MANAGER ROLE ASSIGNMENT -->
+<?php if ($is_event_manager && !$isPast): ?>
+<hr>
+<h3>🎭 Assign Roles (Event Manager)</h3>
 
-        <div style="padding: 2rem;">
-            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
-                <h1 style="margin: 0; font-size: 2rem; color: #111827;"><?= htmlspecialchars($event['title']) ?></h1>
-                
-                <?php $isPast = strtotime($event['start_time']) < time(); ?>
-                <?php if ($isPast): ?>
-                    <span class="status-badge status-passed">Event Ended</span>
-                <?php else: ?>
-                    <span class="status-badge status-upcoming">Upcoming</span>
-                <?php endif; ?>
-            </div>
+<?php if (!$registeredMembers): ?>
+<p>No registered members yet.</p>
+<?php else: ?>
+<table width="100%">
+<tr><th>Name</th><th>Email</th><th>Role</th></tr>
+<?php foreach ($registeredMembers as $m): ?>
+<tr>
+<td><?= htmlspecialchars($m['full_name']) ?></td>
+<td><?= htmlspecialchars($m['email']) ?></td>
+<td>
+<form method="post" action="assign_event_role.php">
+<input type="hidden" name="event_id" value="<?= $eventId ?>">
+<input type="hidden" name="user_id" value="<?= $m['id'] ?>">
+<select name="role" onchange="this.form.submit()">
+<option value="">-- Select --</option>
+<option value="anchor" <?= $m['role']=='anchor'?'selected':'' ?>>Anchor</option>
+<option value="volunteer" <?= $m['role']=='volunteer'?'selected':'' ?>>Volunteer</option>
+<option value="crafting" <?= $m['role']=='crafting'?'selected':'' ?>>Crafting</option>
+</select>
+</form>
+</td>
+</tr>
+<?php endforeach; ?>
+</table>
+<?php endif; ?>
+<?php endif; ?>
 
-            <div class="event-meta">
-                <div class="meta-item">📅 <?= date('M d, Y - h:i A', strtotime($event['start_time'])) ?></div>
-                <div class="meta-item">📍 <?= htmlspecialchars($event['location'] ?? 'Online') ?></div>
-                <div class="meta-item">👤 <?= htmlspecialchars($event['organizer']) ?></div>
-            </div>
+<hr>
 
-            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+<!-- MEMBER VIEW -->
+<?php if ($isRegistered): ?>
+<h3>✅ You are registered</h3>
 
-            <h3 style="margin-top: 0;">About this Event</h3>
-            <p style="line-height: 1.8; color: #4b5563; white-space: pre-wrap;"><?= htmlspecialchars($event['description']) ?></p>
+<?php
+$stmt = $pdo->prepare("
+    SELECT role FROM event_roles
+    WHERE event_id = ? AND user_id = ?
+");
+$stmt->execute([$eventId, $user['id']]);
+$myRole = $stmt->fetchColumn();
+?>
 
-            <div style="margin-top: 3rem; text-align: center;">
-                <?php if ($isRegistered): ?>
-                    
-                    <div style="background: #f0fdf4; padding: 20px; border-radius: 12px; border: 1px solid #bbf7d0;">
-                        <h3 style="color: #166534; margin: 0 0 10px 0;">✅ You are going!</h3>
-                        <p style="margin-bottom: 20px;">We have reserved your spot.</p>
-                        <?php if (!$isPast): ?>
-                            <form method="post">
-                                <input type="hidden" name="leave_event" value="1">
-                                <button type="submit" style="background: white; color: #dc2626; border: 1px solid #dc2626;">Cancel Registration</button>
-                            </form>
-                        <?php endif; ?>
-                    </div>
+<?php if ($myRole): ?>
+<p><strong>Your Role:</strong> <?= ucfirst($myRole) ?></p>
+<?php else: ?>
+<p><em>Your role has not been assigned yet.</em></p>
+<?php endif; ?>
 
-                <?php elseif (!$isPast): ?>
-                    
-                    <?php if ($is_admin): ?>
-                        <div style="background: #f3f4f6; padding: 15px 30px; border-radius: 8px; display: inline-block; color: #555; border: 1px dashed #ccc;">
-                            🔒 <strong>Admin Mode</strong><br>
-                            <span style="font-size: 0.9em;">I am the Super Admin. I have full access and control over system settings and user management.</span>
-                        </div>
+<form method="post">
+<input type="hidden" name="leave_event">
+<button type="submit">Cancel Registration</button>
+</form>
 
-                    <?php elseif ($is_organizer): ?>
-                        <div style="background: #f3f4f6; padding: 15px 30px; border-radius: 8px; display: inline-block; color: #555; border: 1px dashed #ccc;">
-                            🎓 <strong>Organizer View</strong><br>
-                            <span style="font-size: 0.9em;">You created this event.</span>
-                        </div>
+<?php elseif (!$isPast && !$is_admin && !$is_event_manager): ?>
+<form method="post">
+<input type="hidden" name="join_event">
+<button type="submit">Join Event</button>
+</form>
+<?php endif; ?>
 
-                    <?php else: ?>
-                        <form method="post">
-                            <input type="hidden" name="join_event" value="1">
-                            <button type="submit" style="font-size: 1.2rem; padding: 15px 40px;">
-                                🎟️ Join Event Now
-                            </button>
-                        </form>
-                    <?php endif; ?>
-
-                <?php else: ?>
-                    <button disabled style="background: #ccc; cursor: not-allowed;">Registration Closed</button>
-                <?php endif; ?>
-                
-                </div>
-
-        </div>
-    </div>
 </div>
 </body>
 </html>
